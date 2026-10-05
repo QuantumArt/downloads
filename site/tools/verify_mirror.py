@@ -45,6 +45,33 @@ ASSET_RE = re.compile(
 RESOURCE_TAGS = ("img", "script", "source", "link", "iframe", "video", "audio")
 
 
+CSS_URL_RE = re.compile(r"""url\(\s*['"]?([^'")]+)['"]?\s*\)""", re.I)
+
+
+def css_asset_urls(css_text, base_path):
+    """Ассеты, на которые ссылается CSS (url(...) в том числе).
+
+    Без этого обход не видит шрифты: в разметке они упомянуты только
+    preload'ом одного файла, а остальные живут в @font-face внутри CSS.
+    Именно так в зеркале незаметно пропало 9 файлов шрифтов из 10.
+    """
+    out = set()
+    for raw in CSS_URL_RE.findall(css_text):
+        if raw.startswith(("data:", "http://", "https://", "//", "#")):
+            continue
+        # путь относительно каталога CSS-файла
+        segs = [s for s in base_path.split("/") if s]
+        segs = segs[:-1]  # убрать имя файла
+        for part in raw.split("/"):
+            if part == "..":
+                if segs:
+                    segs.pop()
+            elif part not in (".", ""):
+                segs.append(part)
+        out.add("/" + "/".join(segs))
+    return out
+
+
 class LinkCollector(HTMLParser):
     """Собирает href (все, включая внешние) и src/srcset указанных тегов."""
 
@@ -252,6 +279,15 @@ def crawl(fetcher, start_url, max_pages, max_depth, ignore):
         is_html = "html" in ctype.lower() or not ASSET_RE.search(key)
         if not is_html:
             assets[key] = rec
+            # CSS может ссылаться на другие ассеты (@font-face, background-image).
+            # Без обхода этих ссылок обход не увидит шрифты.
+            if key.lower().endswith(".css"):
+                try:
+                    for extra in css_asset_urls(body.decode("utf-8", errors="replace"), key):
+                        if same_origin(extra, origin):
+                            queue.append((extra, depth + 1))
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"{key}: CSS parse: {exc}")
             continue
 
         pages[key] = rec
