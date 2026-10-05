@@ -177,6 +177,59 @@ cd ~/downloads/site
 ./deploy.sh --force    # полная пересборка без кэша
 ```
 
+## Если `git pull` падает с 403
+
+На этом VPS `/root/.gitconfig` содержит `credential.helper=store`, а
+`/root/.git-credentials` — токен, созданный под другой репозиторий. Git
+опрашивает helper'ы по очереди (системный → глобальный → локальный) и берёт
+первый ответивший, поэтому глобальный store перебивает локальный и на
+приватный репозиторий уходит чужой токен:
+
+```
+remote: Write access to repository not granted.
+fatal: unable to access 'https://github.com/anisimovs/downloads.git/': 403
+```
+
+`deploy.sh` это уже обходит: он выставляет `GIT_CONFIG_GLOBAL=/dev/null`
+(выбрасывает глобальный конфиг — общий файл на общем сервере не трогаем) и
+задаёт единственный helper через `-c`.
+
+Для ручного `git pull` повтори то же самое:
+
+```bash
+cd ~/downloads
+set -a && . .credentials.env && set +a
+GIT_CONFIG_GLOBAL=/dev/null \
+  git -c credential.helper='!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f' \
+  pull
+```
+
+**Не надо** удалять `/root/.git-credentials` или снимать helper глобально —
+эти креды используют другие проекты на этом же сервере.
+
+### Диагностика: какой токен реально отдаёт git
+
+Длины и первые символы не различают токены (оба fine-grained PAT, оба
+`github_pat_…`, длина 93). Сравнивай хеши:
+
+```bash
+GH=$(printf '%s' "$GH_TOKEN" | sha256sum | cut -c1-8)
+US=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill 2>/dev/null \
+     | sed -n 's/^password=//p' | tr -d '\n' | sha256sum | cut -c1-8)
+echo "наш: $GH | git отдаёт: $US"
+```
+
+Если хеши не совпадают — git берёт креды не оттуда. Ещё один источник,
+который не видно в `grep -i credential`, — заголовок в конфиге:
+
+```bash
+git config --list --show-origin | grep -i extraheader
+```
+
+Если там есть `http."https://github.com/".extraheader` со старым
+Authorization, он перебивает helper, и его нужно убрать
+(`git config --local --unset-all http.https://github.com/.extraheader`).
+
 ## Откат
 
 Если что-то пошло не так:

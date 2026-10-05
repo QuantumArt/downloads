@@ -44,12 +44,41 @@ print_status "Pre-flight checks passed"
 
 echo ""
 echo "📥 Step 1: Pulling latest changes..."
+
+# Авторизация для git на этом VPS.
+#
+# Глобальный конфиг (/root/.gitconfig) содержит credential.helper=store, и его
+# ~/.git-credentials отдаёт токен, созданный под другой репозиторий — на
+# anisimovs/downloads GitHub отвечает 403. Helper'ы опрашиваются по очереди, и
+# первый ответивший выигрывает, поэтому глобальный store перебивает локальный.
+#
+# Обходим это двумя средствами:
+#   GIT_CONFIG_GLOBAL=/dev/null  — выбрасывает глобальный конфиг целиком,
+#                                  store перестаёт участвовать (общий файл на
+#                                  общем сервере не трогаем);
+#   credential.helper через -c  — единственный оставшийся источник кредов.
+# Значение токена при этом нигде не сохраняется: читается из .credentials.env.
+if [ -z "${GH_TOKEN:-}" ]; then
+    CREDS_FILE="$SCRIPT_DIR/../.credentials.env"
+    if [ -f "$CREDS_FILE" ]; then
+        set -a; . "$CREDS_FILE"; set +a
+    fi
+fi
+
+GH_HELPER='!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f'
+
 # Первый деплой идёт в ещё пустой репозиторий: ветки upstream нет, и обычный
 # `git pull` падает с "no tracking information". Не прерываем деплой из-за этого —
 # кода на диске уже достаточно, чтобы собрать образ.
 if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-    git pull
-    print_status "Code up to date"
+    PRE_PULL_HASH=$(git rev-parse HEAD)
+    GIT_CONFIG_GLOBAL=/dev/null git -c credential.helper="$GH_HELPER" pull
+    POST_PULL_HASH=$(git rev-parse HEAD)
+    if [ "$PRE_PULL_HASH" = "$POST_PULL_HASH" ]; then
+        echo "ℹ️  Изменений нет — продолжаю пересборку (инкрементальный деплой)"
+    else
+        print_status "Получено обновление: $PRE_PULL_HASH → $POST_PULL_HASH"
+    fi
 else
     echo "ℹ️  No upstream branch configured — собираю из текущего состояния рабочей копии"
 fi
