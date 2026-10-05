@@ -40,6 +40,14 @@ echo "📁 Project root: $SCRIPT_DIR"
 if ! command -v docker >/dev/null 2>&1; then
     print_error "docker not found on PATH."
 fi
+
+# Список «сирот» compose-проекта. Не удаляем: на этом VPS из соседних
+# каталогов крутятся чужие сервисы, и они не наши.
+ORPHANS=$(docker compose -f "$COMPOSE_FILE" ps -a --filter status=exited --format '{{.Names}}' 2>/dev/null)
+if [ -n "$ORPHANS" ]; then
+    echo "ℹ️  Остановленные контейнеры этого compose-проекта (не трогаем):"
+    echo "$ORPHANS" | sed 's/^/    /'
+fi
 print_status "Pre-flight checks passed"
 
 echo ""
@@ -87,7 +95,13 @@ echo ""
 echo "🐳 Step 2: Docker compose..."
 if [ "$FORCE" = true ]; then
     echo "🔥 FORCE MODE: Stopping container, cleaning build cache..."
-    docker compose -f "$COMPOSE_FILE" down --remove-orphans
+    # ВНИМАНИЕ: никаких --remove-orphans. На этом VPS из этого же каталога
+    # запущены контейнеры других проектов — например nuget-baget (BaGet,
+    # приватный NuGet-фид на 127.0.0.1:3022, restart: unless-stopped).
+    # docker compose считает «сиротами» контейнеры с тем же compose-проектом,
+    # но не перечисленные в нашем файле, и --remove-orphans удалил бы их
+    # вместе с их volume. Останавливаем только свой сервис.
+    docker compose -f "$COMPOSE_FILE" down
     docker builder prune -af
     echo "🔥 Building from scratch..."
     docker compose -f "$COMPOSE_FILE" build --no-cache --pull
