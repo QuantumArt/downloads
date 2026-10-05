@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{%- from "_macros.html" import icon -%}
+{% block content %}
+    <!--start zone Content--><!--end zone Content-->
+
+<div class="product-detail">
+<div class="container">
+{%- for block in blocks %}
+<div class="info-block product-detail__item">
+<h2 class="title info-block__title">{{ block.title }}</h2>
+<ul class="documents-list">
+{%- for item in block['items'] %}
+<li class="documents-list__item"><a class="documents-list__link" href="{{ item.url }}"{% if item.target %} target="{{ item.target }}"{% endif %}>{{ icon('icon-pdf', 24, 24, 'documents-list__icon', item.get('tight_icon', false)) }}{{ item.title }}</a></li>{%- endfor %}</ul></div>
+{%- endfor %}</div></div>    <!--start zone BelowContent--><!--end zone BelowContent-->
+    <!--start zone RecursiveBelowContent--><!--end zone RecursiveBelowContent-->
+{%- endblock content -%}

@@ -1,0 +1,20 @@
+{
+  "site_url": "https://downloads.quantumart.ru",
+  "yandex_metrika_id": "87525699",
+  "company": {
+    "name": "QuantumArt",
+    "home_url": "https://quantumart.ru",
+    "phone_display": "+7 (495) 783-65-74",
+    "phone_href": "+74957836574"
+  },
+  "header": {
+    "logo_width": 164,
+    "logo_height": 12,
+    "toggler_label": "Открыть меню"
+  },
+  "archive_link": {
+    "title": "Архив",
+    "url": "https://downloads.quantumart.ru/archive/",
+    "target": "_blank"
+  }
+}

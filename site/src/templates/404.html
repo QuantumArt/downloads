@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{# 404 отдаётся контейнерным nginx (error_page 404 /404.html) и хостовым nginx.
+   Разметка та же, что у главной, но без списка документов — иначе страница
+   ошибки предлагала бы рабочие ссылки на скачивание. #}
+{%- block content -%}
+<div class="product-detail">
+<div class="container">
+</div></div>
+{%- endblock content -%}

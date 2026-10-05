@@ -1,0 +1,63 @@
+{# Базовый шаблон зеркала downloads.quantumart.ru.
+   Структура <head>/<header> повторяет источник 1:1 (ASP.NET/QP8.Framework).
+   Спрайт инлайнится в <body> — как в оригинале, от него зависят <use xlink:href>. #}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="format-detection" content="telephone=no">
+    
+{{ head_extra | safe }}    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5" />
+    <meta name="msapplication-TileColor" content="#ffc40d" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="preload" as="font" href="/fonts/Raleway-Extrabold-800.woff2" />
+    <link href="/css/demosite.min.css" media="screen" rel="stylesheet" type="text/css">
+</head>
+<body>
+    <div style="display: none;">
+{{ sprite | safe }}
+	</div>
+	
+
+    <!--start zone SiteHeaderZone--><!--end zone SiteHeaderZone-->
+{{ zone_gap | safe }} class="header " data-header="data-header">
+    <div class="header__container container">
+        <a href="{{ site.company.home_url }}" class="header__logo logo">
+            <svg width="{{ site.header.logo_width }}" height="{{ site.header.logo_height }}" aria-hidden="true">
+                <use xlink:href="#logo"></use>
+            </svg>
+        </a>
+        <nav class="header__nav main-nav main-nav--bg-light" data-active-class="main-nav--expanded" data-navigation="data-navigation">
+            <div class="main-nav__menu">
+                <ul class="main-nav__list">
+                <div class="main-nav__bottom">
+                    <a class="main-nav__contact-link" href="tel:{{ site.company.phone_href }}">
+                        <span><nobr>{{ site.company.phone_display }}</nobr></span><svg width="14" height="14" aria-hidden="true">
+                            <use xlink:href="#icon-phone"></use>
+                        </svg>
+                    </a>
+                </div>
+            </div><button class="main-nav__toggler toggler" type="button" data-expanded="false" data-active-class="toggler--active" aria-label="{{ site.header.toggler_label }}" data-toggler="data-toggler"><span></span></button>
+        </nav>
+    </div>
+</header>
+<main>
+{%- block content %}{% endblock %}
+</main>
+
+    <!--start zone SiteFooterZone--><!--end zone SiteFooterZone-->
+
+
+    <!-- ==== Main JavaScript ==== -->
+    <script src="/js/demosite.min.js"></script>
+
+    <!-- инициализационные скрипты для OnScreen (если используются аб-тесты, должен быть после их инициализации) -->
+    
+</body>
+</html>
