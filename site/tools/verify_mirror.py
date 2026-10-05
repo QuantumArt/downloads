@@ -26,12 +26,14 @@
 import argparse
 import hashlib
 import http.client
+import json
 import re
 import socket
 import ssl
 import sys
 from collections import Counter
 from html.parser import HTMLParser
+from pathlib import Path
 from urllib.parse import urldefrag, urljoin, urlsplit, urlunsplit
 
 # Расширения, которые считаем ассетами, а не страницами.
@@ -41,10 +43,24 @@ ASSET_RE = re.compile(
     re.I,
 )
 
-# Префиксы хранилища файлов. Старое — qsupport, новое — своё, отдаёт 302
-# на ассеты GitHub Release. Используются только при --expect-link-prefix-rewrite.
-OLD_STORAGE_PREFIX = "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/"
-NEW_STORAGE_PREFIX = "https://storage.quantumart.ru/downloads/"
+# Намеренные отличия зеркала: перенос ссылок на своё хранилище плюс
+# переименования файлов. Описаны в src/data/link-migration.json рядом с
+# содержимым сайта, чтобы ожидаемое и проверяемое лежало в одном месте.
+MIGRATION_FILE = Path(__file__).resolve().parent.parent / "src/data/link-migration.json"
+
+
+def load_migration():
+    if not MIGRATION_FILE.exists():
+        raise SystemExit(f"НЕ НАЙДЕН {MIGRATION_FILE}")
+    data = json.loads(MIGRATION_FILE.read_text(encoding="utf-8"))
+    return data["old_prefix"], data["new_prefix"], data.get("renames", {})
+
+
+def apply_migration(text, old_prefix, new_prefix, renames):
+    """Приводит текст оригинала к тому, как выглядит зеркало."""
+    for old_url, new_url in sorted(renames.items(), key=lambda kv: -len(kv[0])):
+        text = text.replace(old_url, new_url)
+    return text.replace(old_prefix, new_prefix)
 
 # Теги, которые самостоятельно тянут ресурсы.
 RESOURCE_TAGS = ("img", "script", "source", "link", "iframe", "video", "audio")
@@ -346,8 +362,8 @@ def main():
     ap.add_argument("--max-pages", type=int, default=200)
     ap.add_argument("--max-depth", type=int, default=4)
     ap.add_argument("--expect-link-prefix-rewrite", action="store_true",
-                    help="зеркало намеренно перевело ссылки со старого хранилища "
-                         f"на новое ({OLD_STORAGE_PREFIX} -> {NEW_STORAGE_PREFIX}); "
+                    help="зеркало намеренно перевело ссылки на новое хранилище "
+                         "и переименовало три файла (src/data/link-migration.json); "
                          "такие расхождения считать ожидаемыми, остальное сверять как есть")
     ap.add_argument("--insecure", action="store_true", help="не проверять TLS-сертификаты")
     ap.add_argument("--ca-bundle", help="путь к файлу корневых сертификатов (PEM)")
@@ -358,6 +374,7 @@ def main():
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
+    migration = load_migration()
     live = args.live_url.rstrip("/") or "/"
     # .hostname, а не .netloc: netloc включает порт («127.0.0.1:3090»),
     # и такое значение не резолвится — gaierror.
@@ -434,7 +451,7 @@ def main():
         raw = orig_body_cache.get(path_key)
         if raw is None:
             return pages[path_key]
-        fixed = raw.replace(OLD_STORAGE_PREFIX, NEW_STORAGE_PREFIX).encode("utf-8")
+        fixed = apply_migration(raw, *migration).encode("utf-8")
         return {"status": 200, "ctype": "text/html", "size": len(fixed),
                 "sha256": hashlib.sha256(fixed).hexdigest()}
 
@@ -475,10 +492,7 @@ def main():
         o = orig_links[path]
         m = live_links[path]
         if args.expect_link_prefix_rewrite:
-            o = Counter({
-                (u.replace(OLD_STORAGE_PREFIX, NEW_STORAGE_PREFIX)
-                 if u.startswith(OLD_STORAGE_PREFIX) else u): n
-                for u, n in o.items()})
+            o = Counter({apply_migration(u, *migration): n for u, n in o.items()})
             o = Counter({u: n for u, n in o.items() if n})
         if o == m:
             continue

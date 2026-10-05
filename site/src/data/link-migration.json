@@ -1,0 +1,20 @@
+{
+  "_comment": "Намеренные отличия зеркала от оригинала. Зеркало перевело ссылки со старого хранилища на своё (storage.quantumart.ru отдаёт 302 на ассеты GitHub Release QuantumArt/storage@v1). Применяется только при сверке tools/verify_mirror.py с флагом --expect-link-prefix-rewrite. Источник правды: соседний проект storage, manifest/mapping.json.",
+
+  "old_prefix": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/",
+  "new_prefix": "https://storage.quantumart.ru/downloads/",
+
+  "renames": {
+    "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/QP_Setup_7.9.7.0..zip": "https://storage.quantumart.ru/downloads/QP_Setup_7.9.7.0.zip",
+
+    "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/qp8-pg-functional-сharacteristics.pdf": "https://storage.quantumart.ru/downloads/qp8-pg-functional-characteristics.pdf",
+
+    "https://storage.qp.qsupport.ru/qa_official_site/images/downloads//QP7_Active_Directory.pdf": "https://storage.quantumart.ru/downloads/QP7_Active_Directory.pdf"
+  },
+
+  "rename_reasons": {
+    "QP_Setup_7.9.7.0..zip": "Двойная точка в имени. GitHub схлопывает имена ассетов и сохранил бы файл как QP_Setup_7.9.7.0.zip — ссылка с двумя точками даёт 404.",
+    "qp8-pg-functional-сharacteristics.pdf": "В имени на оригинале кириллическая «с» (U+0441) вместо латинской c. Требует перцент-энкодинга и ломается при копировании; в новом хранилище имя в ASCII.",
+    "QP7_Active_Directory.pdf": "На оригинале в URL двойной слэш после downloads/. Nginx его нормализует, так что ссылка работала и там, но в новом хранилище имя каноническое."
+  }
+}
