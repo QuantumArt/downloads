@@ -45,41 +45,33 @@ print_status "Pre-flight checks passed"
 echo ""
 echo "📥 Step 1: Pulling latest changes..."
 
-# Авторизация для git на этом VPS.
+# Репозиторий публичный (https://github.com/QuantumArt/downloads), токен не
+# нужен — код тянется анонимно. Но отбрасывать глобальный конфиг всё равно
+# нужно: на этом VPS в /root/.gitconfig живёт credential.helper=store, и его
+# ~/.git-credentials подставит чужой токен даже там, где анонимный доступ
+# разрешён. GitHub на такой заголовок отвечает 401/403, и pull падает.
 #
-# Глобальный конфиг (/root/.gitconfig) содержит credential.helper=store, и его
-# ~/.git-credentials отдаёт токен, созданный под другой репозиторий — на
-# anisimovs/downloads GitHub отвечает 403. Helper'ы опрашиваются по очереди, и
-# первый ответивший выигрывает, поэтому глобальный store перебивает локальный.
-#
-# Обходим это тремя средствами:
-#   GIT_CONFIG_GLOBAL=/dev/null  — выбрасывает глобальный конфиг целиком, store
-#                                  перестаёт участвовать (общий файл на общем
-#                                  сервере не трогаем);
-#   GIT_CONFIG_SYSTEM=/dev/null  — то же для системного конфига: там может
-#                                  жить свой helper (/etc/gitconfig). На macOS
-#                                  это не помогает — osxkeychain лежит во
-#                                  встроенном git-core/gitconfig, но он
-#                                  безвреден: на попытку сохранить креды
-#                                  печатает "failed to store" и выходит с 0;
-#   credential.helper через -c  — единственный оставшийся источник кредов.
-# Значение токена при этом нигде не сохраняется: читается из .credentials.env.
-if [ -z "${GH_TOKEN:-}" ]; then
-    CREDS_FILE="$SCRIPT_DIR/../.credentials.env"
-    if [ -f "$CREDS_FILE" ]; then
-        set -a; . "$CREDS_FILE"; set +a
-    fi
+#   GIT_CONFIG_GLOBAL=/dev/null  — store выпадает из авторизации (общий файл
+#                                  на общем сервере не трогаем);
+#   GIT_CONFIG_SYSTEM=/dev/null  — то же для /etc/gitconfig;
+#   GIT_TERMINAL_PROMPT=0        — pull никогда не встанет ждать пароль.
+REPO_URL="https://github.com/QuantumArt/downloads.git"
+ACTUAL_REMOTE=$(git remote get-url origin 2>/dev/null || echo "<не задан>")
+if [ "$ACTUAL_REMOTE" != "$REPO_URL" ]; then
+    echo "⚠️  origin указывает на $ACTUAL_REMOTE, ожидался $REPO_URL"
+    echo "    Правится один раз вручную: git remote set-url origin $REPO_URL"
 fi
 
-GH_HELPER='!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f'
+# Спрашиваем УДАЛЁННЫЙ репозиторий, а не локальную ветку: после смены remote
+# на пустой репозиторий локальный origin/main ещё остаётся (с прошлого
+# remote), и проверка «есть ли upstream» дала бы неверный ответ. На пустом
+# remote `git pull` падает с "no such ref was fetched", а set -e убил бы деплой.
+REMOTE_MAIN=$(GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_TERMINAL_PROMPT=0 \
+              git ls-remote --heads origin main 2>/dev/null)
 
-# Первый деплой идёт в ещё пустой репозиторий: ветки upstream нет, и обычный
-# `git pull` падает с "no tracking information". Не прерываем деплой из-за этого —
-# кода на диске уже достаточно, чтобы собрать образ.
-if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+if [ -n "$REMOTE_MAIN" ] && git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
     PRE_PULL_HASH=$(git rev-parse HEAD)
-    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
-        git -c credential.helper="$GH_HELPER" pull
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_TERMINAL_PROMPT=0 git pull
     POST_PULL_HASH=$(git rev-parse HEAD)
     if [ "$PRE_PULL_HASH" = "$POST_PULL_HASH" ]; then
         echo "ℹ️  Изменений нет — продолжаю пересборку (инкрементальный деплой)"
@@ -87,7 +79,8 @@ if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
         print_status "Получено обновление: $PRE_PULL_HASH → $POST_PULL_HASH"
     fi
 else
-    echo "ℹ️  No upstream branch configured — собираю из текущего состояния рабочей копии"
+    echo "ℹ️  На remote нет ветки main (репозиторий пуст или её ещё не залили)"
+    echo "    Собираю из текущего состояния рабочей копии."
 fi
 
 echo ""

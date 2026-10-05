@@ -4,7 +4,8 @@
 же, где уже развёрнут sidus. Паттерн тот же: Docker-контейнер со статикой +
 хостовый nginx как reverse proxy.
 
-Репозиторий: https://github.com/anisimovs/downloads (приватный, папка `site/`).
+Репозиторий: https://github.com/QuantumArt/downloads (**публичный**, папка `site/`).
+Токен для чтения не нужен — код тянется анонимно.
 
 > **Ключевое отличие от sidus.** Домен `downloads.quantumart.ru` — не поддомен
 > `sqlhub.pro`, а отдельная зона. Общий SAN-сертификат `ts.sqlhub.pro` покрывает
@@ -70,16 +71,16 @@ sudo certbot certificates
 
 ## 2. Клонировать репозиторий
 
-> **Внимание: репозиторий `anisimovs/downloads` пока пуст** — `git clone`
-> скачает репозиторий без единого файла, и `site/` на сервере не появится.
-> Проверь: `git -C ~/downloads log --oneline` — если вывод пустой, сначала
-> нужен первый коммит (см. ниже), и только потом клон или `rsync`.
+> **Внимание: репозиторий был пуст** — `git clone` скачивал репозиторий без
+> единого файла, и `site/` на сервере не появлялся. Проверь:
+> `git -C ~/downloads log --oneline` — если вывод пустой, сначала нужен
+> первый коммит, и только потом клон или `rsync`.
 
 Проект живёт в `~/downloads` (там же `.secrets/cloudflare.ini` из шага 1):
 
 ```bash
 cd ~/downloads
-git clone https://github.com/anisimovs/downloads.git   # только если ещё не клонирован
+git clone https://github.com/QuantumArt/downloads.git   # только если ещё не клонирован
 cd downloads/site
 ```
 
@@ -93,35 +94,28 @@ ls site/ 2>/dev/null || echo "кода проекта ещё нет — нуже
 
 ### Первый коммит (если репозиторий пуст)
 
-С локальной машины, где проект уже собран:
+С локальной машины, где проект уже собран. **Публикация в организацию
+QuantumArt требует прав в ней — токен Slava к `QuantumArt/*` доступа не имеет
+(403), поэтому push делает тот, у кого эти права есть:**
 
 ```bash
 cd /Users/anisimovs/Projects/downloads
-git init
-git add -A
-git status              # убедись, что .credentials.env НЕ в списке
-git commit -m "Static mirror of downloads.quantumart.ru: Jinja2 build, Docker/nginx, deploy runbook"
-git remote add origin https://github.com/anisimovs/downloads.git
+git remote set-url origin https://github.com/QuantumArt/downloads.git
 git push -u origin main
 ```
 
-`.credentials.env` и `.secrets/` должны остаться вне индекса — проверь по
-`.gitignore` перед `git add`.
+`.credentials.env` и `.secrets/` остаются вне индекса — проверь по `.gitignore`
+перед первым коммитом.
 
-Для приватного репозитория нужен PAT (`GH_TOKEN` в `.credentials.env` в корне
-проекта). Чтобы `git pull` в `deploy.sh` не зависал на запрос пароля, настрой
-credential-helper один раз:
+На сервере remote тоже нужно переставить один раз:
 
 ```bash
-set -a && . .credentials.env && set +a
-git config credential.helper '!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f'
+cd ~/downloads
+git remote set-url origin https://github.com/QuantumArt/downloads.git
 ```
 
-Значение токена при этом нигде не сохраняется — оно читается из
-`.credentials.env` (файл в `.gitignore`).
-
-Если репозиторий уже клонирован — просто `cd` туда, `deploy.sh` сам сделает
-`git pull`.
+После этого `deploy.sh` тянет код анонимно, токен не нужен. Если репозиторий
+уже клонирован — просто `cd` туда, `deploy.sh` сам сделает `git pull`.
 
 ## 3. Поднять контейнер
 
@@ -177,59 +171,47 @@ cd ~/downloads/site
 ./deploy.sh --force    # полная пересборка без кэша
 ```
 
-## Если `git pull` падает с 403
+## Если `git pull` падает
 
-На этом VPS `/root/.gitconfig` содержит `credential.helper=store`, а
-`/root/.git-credentials` — токен, созданный под другой репозиторий. Git
-опрашивает helper'ы по очереди (системный → глобальный → локальный) и берёт
-первый ответивший, поэтому глобальный store перебивает локальный и на
-приватный репозиторий уходит чужой токен:
+Репозиторий **публичный**, токен для чтения не нужен. Но на этом VPS в
+`/root/.gitconfig` живёт `credential.helper=store`, а в `/root/.git-credentials` —
+токен, созданный под другой репозиторий. Git опрашивает helper'ы по очереди
+(системный → глобальный → локальный) и берёт первый ответивший, поэтому
+глобальный store подставит чужой токен даже там, где анонимный доступ
+разрешён. GitHub на такой заголовок отвечает 401/403:
 
 ```
 remote: Write access to repository not granted.
-fatal: unable to access 'https://github.com/anisimovs/downloads.git/': 403
+fatal: unable to access 'https://github.com/QuantumArt/downloads.git/': 403
 ```
 
-`deploy.sh` это уже обходит: он выставляет `GIT_CONFIG_GLOBAL=/dev/null`
-(выбрасывает глобальный конфиг — общий файл на общем сервере не трогаем) и
-задаёт единственный helper через `-c`.
+`deploy.sh` это обходит — выставляет `GIT_CONFIG_GLOBAL=/dev/null`,
+`GIT_CONFIG_SYSTEM=/dev/null` и `GIT_TERMINAL_PROMPT=0`. Последнее важно
+отдельно: без него `git pull` в неинтерактивном окружении может зависнуть
+в ожидании пароля вместо того, чтобы упасть.
+
+Для ручного `git pull` повтори то же:
+
+```bash
+GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_TERMINAL_PROMPT=0 \
+  git pull
+```
 
 ### Что НЕ работает (проверено, не гадай)
 
-Пустое значение в локальном конфиге **не** перебивает глобальный store:
+Сброс пустым значением в локальном конфиге глобальный store **не** перебивает:
 
 ```bash
-# ❌ так store всё равно отдаёт чужой токен → 403
+# ❌ store всё равно отдаёт свой токен
 git config --local --unset-all credential.helper
 git config --local credential.helper ''
-git config --local credential.helper '!f() { … }; f'
 ```
 
 Пустое значение сбрасывает только helper'ы уровнем **ниже**, а глобальный
-`store` объявлен раньше и остаётся в списке первым. Работают два варианта:
+`store` объявлен раньше и остаётся в списке первым. Единственный способ
+изолироваться — выбросить глобальный конфиг целиком, не трогая общий файл
+на сервере.
 
-```bash
-# ✅ вариант 1 — выбросить глобальный конфиг (то, что делает deploy.sh)
-GIT_CONFIG_GLOBAL=/dev/null \
-  git -c credential.helper='!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f' \
-  pull
-
-# ✅ вариант 2 — пустой список helper'ов через -c, токен прямо в URL
-git -c credential.helper= fetch \
-  "https://x-access-token:${GH_TOKEN}@github.com/anisimovs/downloads.git" \
-  "refs/heads/*:refs/remotes/origin/*"
-git checkout -B main origin/main
-```
-
-### Замкнутый круг на первом деплое
-
-Если на сервере лежит версия `deploy.sh` **без** этих правок, он не сможет
-стянуть сам себя: голый `git pull` даёт 403, `set -e` убивает скрипт. Тогда
-сначала обнови репозиторий вручную вариантом 1 или 2, и только потом запускай
-`./deploy.sh` — он подтянет остальное.
-
-**Не надо** удалять `/root/.git-credentials` или снимать helper глобально —
-эти креды используют другие проекты на этом же сервере.
 
 ### Диагностика: какой токен реально отдаёт git
 

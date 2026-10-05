@@ -322,7 +322,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 Ручная сверка «открыл страницу — выглядит похоже» ненадёжна: она пропускает
 и недостающие страницы, и разницу в один байт. Скрипт
-`anisimovs/downloads:site/tools/verify_mirror.py` обходит оба сайта и
+`QuantumArt/downloads:site/tools/verify_mirror.py` обходит оба сайта и
 сравнивает всё машинно:
 
 ```bash
