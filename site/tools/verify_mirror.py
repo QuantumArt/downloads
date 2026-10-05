@@ -283,9 +283,13 @@ def crawl(fetcher, start_url, max_pages, max_depth, ignore):
             # Без обхода этих ссылок обход не увидит шрифты.
             if key.lower().endswith(".css"):
                 try:
+                    # css_asset_urls отдаёт пути, а очередь ждёт абсолютные URL,
+                    # и same_origin умеет сравнивать только URL — иначе сравнение
+                    # всегда ложное и обход молча ничего не ставит в очередь.
                     for extra in css_asset_urls(body.decode("utf-8", errors="replace"), key):
-                        if same_origin(extra, origin):
-                            queue.append((extra, depth + 1))
+                        absolute = origin.rstrip("/") + extra
+                        if same_origin(absolute, origin):
+                            queue.append((absolute, depth + 1))
                 except Exception as exc:  # noqa: BLE001
                     errors.append(f"{key}: CSS parse: {exc}")
             continue
