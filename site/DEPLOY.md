@@ -194,15 +194,39 @@ fatal: unable to access 'https://github.com/anisimovs/downloads.git/': 403
 (выбрасывает глобальный конфиг — общий файл на общем сервере не трогаем) и
 задаёт единственный helper через `-c`.
 
-Для ручного `git pull` повтори то же самое:
+### Что НЕ работает (проверено, не гадай)
+
+Пустое значение в локальном конфиге **не** перебивает глобальный store:
 
 ```bash
-cd ~/downloads
-set -a && . .credentials.env && set +a
+# ❌ так store всё равно отдаёт чужой токен → 403
+git config --local --unset-all credential.helper
+git config --local credential.helper ''
+git config --local credential.helper '!f() { … }; f'
+```
+
+Пустое значение сбрасывает только helper'ы уровнем **ниже**, а глобальный
+`store` объявлен раньше и остаётся в списке первым. Работают два варианта:
+
+```bash
+# ✅ вариант 1 — выбросить глобальный конфиг (то, что делает deploy.sh)
 GIT_CONFIG_GLOBAL=/dev/null \
   git -c credential.helper='!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f' \
   pull
+
+# ✅ вариант 2 — пустой список helper'ов через -c, токен прямо в URL
+git -c credential.helper= fetch \
+  "https://x-access-token:${GH_TOKEN}@github.com/anisimovs/downloads.git" \
+  "refs/heads/*:refs/remotes/origin/*"
+git checkout -B main origin/main
 ```
+
+### Замкнутый круг на первом деплое
+
+Если на сервере лежит версия `deploy.sh` **без** этих правок, он не сможет
+стянуть сам себя: голый `git pull` даёт 403, `set -e` убивает скрипт. Тогда
+сначала обнови репозиторий вручную вариантом 1 или 2, и только потом запускай
+`./deploy.sh` — он подтянет остальное.
 
 **Не надо** удалять `/root/.git-credentials` или снимать helper глобально —
 эти креды используют другие проекты на этом же сервере.
@@ -219,16 +243,15 @@ US=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill 2>/dev/n
 echo "наш: $GH | git отдаёт: $US"
 ```
 
-Если хеши не совпадают — git берёт креды не оттуда. Ещё один источник,
-который не видно в `grep -i credential`, — заголовок в конфиге:
+Если хеши не совпадают — git берёт креды не оттуда, и причина в helper'ах
+(см. два рабочих варианта выше). Сравнение полезно как sanity-check: если
+хеши совпали, а 403 всё равно есть, смотри заголовки:
 
 ```bash
-git config --list --show-origin | grep -i extraheader
+GIT_CURL_VERBOSE=1 git ls-remote origin 2>&1 | grep -iE '< HTTP|authorization' | head
 ```
 
-Если там есть `http."https://github.com/".extraheader` со старым
-Authorization, он перебивает helper, и его нужно убрать
-(`git config --local --unset-all http.https://github.com/.extraheader`).
+git маскирует значение как `Authorization: Basic <redacted>`, токен не утечёт.
 
 ## Откат
 

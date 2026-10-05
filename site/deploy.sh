@@ -52,10 +52,16 @@ echo "📥 Step 1: Pulling latest changes..."
 # anisimovs/downloads GitHub отвечает 403. Helper'ы опрашиваются по очереди, и
 # первый ответивший выигрывает, поэтому глобальный store перебивает локальный.
 #
-# Обходим это двумя средствами:
-#   GIT_CONFIG_GLOBAL=/dev/null  — выбрасывает глобальный конфиг целиком,
-#                                  store перестаёт участвовать (общий файл на
-#                                  общем сервере не трогаем);
+# Обходим это тремя средствами:
+#   GIT_CONFIG_GLOBAL=/dev/null  — выбрасывает глобальный конфиг целиком, store
+#                                  перестаёт участвовать (общий файл на общем
+#                                  сервере не трогаем);
+#   GIT_CONFIG_SYSTEM=/dev/null  — то же для системного конфига: там может
+#                                  жить свой helper (/etc/gitconfig). На macOS
+#                                  это не помогает — osxkeychain лежит во
+#                                  встроенном git-core/gitconfig, но он
+#                                  безвреден: на попытку сохранить креды
+#                                  печатает "failed to store" и выходит с 0;
 #   credential.helper через -c  — единственный оставшийся источник кредов.
 # Значение токена при этом нигде не сохраняется: читается из .credentials.env.
 if [ -z "${GH_TOKEN:-}" ]; then
@@ -72,7 +78,8 @@ GH_HELPER='!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f'
 # кода на диске уже достаточно, чтобы собрать образ.
 if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
     PRE_PULL_HASH=$(git rev-parse HEAD)
-    GIT_CONFIG_GLOBAL=/dev/null git -c credential.helper="$GH_HELPER" pull
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+        git -c credential.helper="$GH_HELPER" pull
     POST_PULL_HASH=$(git rev-parse HEAD)
     if [ "$PRE_PULL_HASH" = "$POST_PULL_HASH" ]; then
         echo "ℹ️  Изменений нет — продолжаю пересборку (инкрементальный деплой)"
