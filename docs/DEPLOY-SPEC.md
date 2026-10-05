@@ -1,0 +1,367 @@
+# Спека деплоя статического сайта в Docker на VPS timeweb
+
+Переиспользуемый runbook. Проверено на `downloads.quantumart.ru` (2026-10-05)
+и на проекте `sidus` как образец структуры. Всё, что ниже помечено
+«проверено», прошло через реальный деплой; «не работает» — через проверку с
+намеренно сломанной конфигурацией.
+
+Предназначение: поднять новый статический сайт рядом с уже работающими на том
+же VPS, не задев их.
+
+---
+
+## 1. Схема
+
+```
+Интернет → Cloudflare edge (TLS) → хостовый nginx (:443)
+                                        ↓ proxy_pass
+                                 127.0.0.1:<ПОРТ> → контейнер nginx
+                                                       ↓
+                                                 /usr/share/nginx/html (dist/)
+```
+
+Три обязательных правила:
+
+1. **Контейнер слушает только `127.0.0.1`.** Наружу торчит исключительно
+   хостовый nginx. Наружу выставленный порт — дыра в TLS и в rate limiting.
+2. **Порт контейнера — свой на каждый сайт.** Проверяй `docker ps` перед
+   первым запуском: занятые порты на этом VPS меняются, а занятый порт
+   проявится как «сайт не открывается у соседа».
+3. **Каждому сайту — свой каталог и свой токен.** Ниже объясняется, почему
+   общий токен или общий конфиг здесь ломаются.
+
+---
+
+## 2. Структура проекта (образец — `sidus`)
+
+```
+<project>/
+├── .gitignore              # обязательно: .credentials.env, .secrets/
+├── site/
+│   ├── build.py             # Jinja2 + src/data/*.json → dist/
+│   ├── Dockerfile           # multi-stage: python:3.12-slim → nginx:1.27-alpine
+│   ├── docker-compose.production.yml
+│   ├── deploy.sh
+│   ├── DEPLOY.md            # runbook конкретного сайта
+│   ├── README.md
+│   ├── nginx/
+│   │   ├── default.conf     # внутриконтейнерный: gzip, кэш, 404
+│   │   └── <domain>         # хостовый server block: TLS + reverse proxy
+│   └── src/
+│       ├── data/*.json      # контент
+│       ├── templates/       # base.html + по шаблону на страницу
+│       └── static/          # css, js, шрифты, иконки
+```
+
+`Dockerfile` (двухстадийный: сборка → отдача):
+
+```dockerfile
+FROM python:3.12-slim AS builder
+WORKDIR /app
+RUN pip install --no-cache-dir jinja2
+COPY . .
+RUN python3 build.py
+
+FROM nginx:1.27-alpine AS runtime
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget --spider -q http://localhost/ || exit 1
+```
+
+---
+
+## 3. Авторизация git на VPS — главная грабля этого сервера
+
+### 3.1 Что там уже настроено (проверено)
+
+На VPS в `/root/.gitconfig` живёт `credential.helper=store`, а в
+`/root/.git-credentials` — токен, созданный под **другой** репозиторий.
+Git опрашивает helper'ы по очереди (системный → глобальный → локальный) и
+берёт **первый ответивший**, поэтому глобальный store перебивает локальный
+helper, и приватный репозиторий получает 403:
+
+```
+remote: Write access to repository not granted.
+fatal: unable to access 'https://…': 403
+```
+
+### 3.2 Что НЕ работает (проверено, не трать время)
+
+```bash
+# ❌ НЕ сбрасывает глобальный store — 403 останется
+git config --local --unset-all credential.helper
+git config --local credential.helper ''
+git config --local credential.helper '!f() { … }; f'
+```
+
+Пустое значение сбрасывает только helper'ы уровнем **ниже** объявленного.
+Глобальный `store` объявлен раньше и остаётся первым в списке.
+
+### 3.3 Что работает (проверено) — два варианта
+
+```bash
+# ✅ Вариант 1. Выбросить глобальный конфиг. То, что использует deploy.sh.
+cd ~/project
+set -a && . .credentials.env && set +a
+GIT_CONFIG_GLOBAL=/dev/null \
+  git -c credential.helper='!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f' \
+  pull
+
+# ✅ Вариант 2. Пустой список helper'ов через -c, токен прямо в URL.
+git -c credential.helper= fetch \
+  "https://x-access-token:${GH_TOKEN}@github.com/OWNER/REPO.git" \
+  "refs/heads/*:refs/remotes/origin/*"
+git checkout -B main origin/main
+```
+
+**Общий `/root/.git-credentials` не трогать.** Он общий для всех проектов на
+сервере: снесишь — сломаешь чужие деплои. `store` матчится только по хосту,
+поэтому добавить вторую запись для `github.com` тоже нельзя: первая попадёт
+не та, и что-то сломается. Изоляция достигается только локально, через
+`GIT_CONFIG_GLOBAL` или `-c`.
+
+### 3.4 Блок для deploy.sh
+
+```bash
+# Авторизация: на этом VPS глобальный credential.helper=store отдаёт токен,
+# созданный под другой репозиторий, и перебивает всё остальное. Лечится
+# выбросом глобального конфига — общий файл не трогаем.
+if [ -z "${GH_TOKEN:-}" ]; then
+    CREDS_FILE="$SCRIPT_DIR/../.credentials.env"
+    if [ -f "$CREDS_FILE" ]; then
+        set -a; . "$CREDS_FILE"; set +a
+    fi
+fi
+GH_HELPER='!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f'
+
+GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    git -c credential.helper="$GH_HELPER" pull
+```
+
+Значение токена нигде не сохраняется — читается из `.credentials.env` в момент
+вызова. Скрипт сам подгружает файл, поэтому запуск сводится к `./deploy.sh`.
+
+### 3.5 Токены: по одному на репозиторий
+
+Fine-grained PAT выдаётся на конкретный набор репозиториев. У Slava их
+несколько, и каждый открывает **только свой** репозиторий:
+
+| Токен | `OWNER/quantumart` | `OWNER/downloads` |
+|---|---|---|
+| из `quantumart/.credentials.env` | 200 | 404 |
+| из `downloads/.credentials.env` | 404 | 200 (admin) |
+
+Универсального токена нет, и это осознанно. Значит в каждом каталоге проекта
+лежит свой `.credentials.env`; скопировав один файл в два каталога, получишь
+403 в одном из них.
+
+**Сверять токены только по хешу значения, не по длине и не по началу.** Оба PAT
+начинаются с `github_pat_` и имеют длину 93 — визуально неотличимы:
+
+```bash
+printf '%s' "$GH_TOKEN" | sha256sum | cut -c1-8
+# на сервере — sha256sum, на macOS — shasum -a 256
+```
+
+---
+
+## 4. Первый деплой: порядок шагов
+
+Порядок обязателен. Нарушишь — получишь невалидный TLS на боевом домене.
+
+### Шаг 0. Проверить порт и DNS
+
+```bash
+docker ps --format '{{.Names}}\t{{.Ports}}'
+ss -ltnp | grep <ПОРТ>
+dig +short <domain> A
+```
+
+На момент 2026-10-05 на timeweb заняты: 3001, 3010, 3020, 5000, 7700, 8090, 9117.
+
+### Шаг 1. TLS-сертификат — ДО переключения DNS
+
+Общий SAN-сертификат этого VPS (`ts.sqlhub.pro`) покрывает **только**
+`*.sqlhub.pro`. Если домен из другой зоны — сертификат нужно выпускать
+отдельный, иначе после переключения DNS посетители получат предупреждение
+о невалидном сертификате.
+
+```bash
+sudo certbot certonly --dns-cloudflare \
+  --dns-cloudflare-credentials ~/project/.secrets/cloudflare.ini \
+  -d <domain> --cert-name <domain>
+
+sudo certbot certificates   # проверить, что домен в списке
+```
+
+Путь к credentials — **в каталоге проекта**, а не `~/.secrets/`:
+`~/project/.secrets/cloudflare.ini`. Не выводи содержимое файла.
+
+Автопродление уже настроено через `certbot.timer` — отдельно ничего делать
+не нужно.
+
+### Шаг 2. Забрать код
+
+Если репозиторий на GitHub **пуст**, `git clone` даст каталог без файлов.
+Проверяй: `git -C <dir> log --oneline` — пустой вывод означает, что нужен
+первый коммит с локальной машины, и только потом клон.
+
+Если каталог уже существует (как обычно, там лежат `.secrets/`
+и `.credentials.env`), клонировать «поверх» нельзя — инициализируй на месте:
+
+```bash
+cd ~/project
+git init
+git remote add origin https://github.com/OWNER/REPO.git
+set -a && . .credentials.env && set +a
+git config credential.helper '!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f'
+GIT_CONFIG_GLOBAL=/dev/null git -c credential.helper='!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f' fetch origin main
+git checkout -B main origin/main
+```
+
+### Шаг 3. Поднять контейнер
+
+```bash
+cd ~/project/site && ./deploy.sh
+```
+
+### Шаг 4. Подключить хостовый nginx
+
+```bash
+sudo cp nginx/<domain> /etc/nginx/sites-available/<domain>
+sudo ln -s /etc/nginx/sites-available/<domain> /etc/nginx/sites-enabled/<domain>
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### Шаг 5. Переключить DNS
+
+A-запись домена → IP этого VPS. Только теперь: сертификат уже выпущен, nginx
+настроен. Проверить: `dig +short <domain> A` вернул IP этого сервера.
+
+### Шаг 6. Проверка
+
+```bash
+# локально, минуя DNS
+curl -I http://127.0.0.1:<ПОРТ>/
+
+# через хостовый nginx, до переключения DNS
+curl -I --resolve <domain>:443:127.0.0.1 https://<domain>/
+
+# после переключения
+curl -I https://<domain>/
+```
+
+---
+
+## 5. Замкнутый круг первого деплоя
+
+Если на сервере лежит версия `deploy.sh` **без** правки авторизации из §3.4,
+он не сможет стянуть сам себя: голый `git pull` → 403 → `set -e` убивает
+скрипт. Сначала обнови репозиторий вручную вариантом 1 или 2 из §3.3, потом
+запускай `./deploy.sh` — он подтянет остальное.
+
+Ошибка выглядит так:
+
+```
+🚀 Starting … deploy...
+📥 Step 1: Pulling latest changes...
+remote: Write access to repository not granted.
+fatal: unable to access '…': 403
+```
+
+---
+
+## 6. Проверка, что отдаётся именно новый контейнер
+
+Ключ кэша CDN или браузер может отдавать старую версию. Сверяй хеш тела:
+
+```bash
+curl -s https://<domain>/ | sha256sum
+```
+
+Полезно зафиксировать эталонный хеш в коммите, тогда проверка однозначна.
+
+Если для этого проекта есть эталонный sha256 (см. `site/README.md` в
+`downloads`), сверяй именно с ним — так отличаешь «сервер отдаёт старый
+контент» от «контент неверен вовсе».
+
+---
+
+## 7. Откат
+
+```bash
+cd ~/project/site
+docker compose -f docker-compose.production.yml down
+sudo rm /etc/nginx/sites-enabled/<domain>
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Плюс вернуть A-запись на прежний IP. Контейнер можно поднять обратно в любой
+момент — он ни от чего на сервере не зависит.
+
+---
+
+## 8. Чек-лист перед деплоем
+
+- [ ] Порт свободен (`docker ps`, `ss -ltnp`)
+- [ ] `.credentials.env` и `.secrets/` в `.gitignore`; проверить `git status` до коммита
+- [ ] В репозитории не осталось незакоммиченных правок (`git status --short`)
+- [ ] Секретов в истории нет: `git log -p --all | grep -c 'github_pat_\|GH_TOKEN=gith'`
+- [ ] В `docker-compose.production.yml` указан **свой** порт и **свой** `container_name`
+- [ ] В `nginx/<domain>` — правильный `server_name`, путь к **своему** сертификату, `proxy_pass` на **свой** порт
+- [ ] Сертификат выпущен (если домен вне SAN `ts.sqlhub.pro` — обязательно отдельный)
+- [ ] Домен покрыт этим сертификатом: `sudo certbot certificates`
+- [ ] `nginx -t` проходит до reload
+- [ ] DNS переключается **после** сертификата и nginx
+
+---
+
+## 9. Грабли, на которые уже наступали
+
+Собрано по факту, а не по теории. Каждый пункт либо потратил время, либо
+воспроизведён намеренно.
+
+### Git и авторизация
+
+- **Глобальный `store` перебивает всё.** Лечится только `GIT_CONFIG_GLOBAL=/dev/null`
+  или `-c credential.helper=`. Сброс пустым значением в локальном конфиге не
+  работает (§3.2).
+- **Ложноположительный тест.** Проверяя, какой helper побеждает, я подставил
+  store-файл, до которого тест не дотягивался, — store молчал, и вывод
+  «сброс работает» оказался неверным. Тест настройки авторизации обязан
+  использовать **реальный** файл с кредами, иначе он ничего не проверяет.
+- **Сравнение токенов по длине или префиксу бесполезно.** Оба PAT
+  `github_pat_…`, длина 93. Только sha256 от значения.
+- **Общий `~/.git-credentials` не трогать** — он обслуживает другие проекты.
+- **`git fetch` с токеном в URL — хороший изолирующий тест.** Если он проходит,
+  а обычный — нет, дело точно в helper'ах, а не в токене.
+
+### Содержимое и сборка
+
+- **Jinja схлопывает пустые блоки и переводы строк.** Для клона «1:1» пришлось
+  отдавать такие места переменными (`head_extra`, `zone_gap`) и дописывать
+  `"\n"` при записи файла. Если выход сравнивается с оригиналом побайтово —
+  сразу заложи это в шаблон, потом переделывать дороже.
+- **`autoescape=True` ломает инлайновый SVG.** Спрайт иконок вставляется с
+  `| safe`, иначе атрибуты превратятся в текст.
+- **Клон 1:1 проверяется только sha256.** `diff` показывает «0 расхождений»
+  при разных байтах, если строки разной длины (base64 в спрайте сдвигает
+  вывод). Размер файла — тоже недостаточно.
+- **Финальный перевод строки теряется.** Jinja срезает его; дописывай
+  `html.strip("\n") + "\n"`.
+
+### Контейнер и nginx
+
+- **Каталог со страницей отдаёт 301 на вариант со слэшем.** Проверяй `/archive/`
+  со слэшем, иначе smoke-тест увидит редирект вместо 200. Явный
+  `location = /archive { return 301 /archive/; }` делает поведение предсказуемым.
+- **Ошибка `failed to store: -60006`** — это keychain-helper из встроенного
+  `git-core/gitconfig` на macOS. Проверено: код возврата 0, `set -e` не
+  срабатывает. На Linux её нет.
+- **`GIT_CONFIG_SYSTEM=/dev/null` не отключает keychain на macOS** — тот лежит
+  во встроенном конфиге, а не в `/etc/gitconfig`. Переменная полезна только
+  как защита от helper'а в `/etc/gitconfig` на сервере.
+- **Финальный smoke-тест должен проверять и 404**, иначе сломанный
+  `error_page` не заметен до первого запроса несуществующего пути.
