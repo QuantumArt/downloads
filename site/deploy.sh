@@ -41,6 +41,20 @@ if ! command -v docker >/dev/null 2>&1; then
     print_error "docker not found on PATH."
 fi
 
+# Одноразовая миграция после ввода `name: downloads` в compose.
+# Контейнер, созданный до этого, помечен проектом 'site' (имя бралось из
+# basename каталога). После смены имени он не принадлежит текущему проекту, и
+# `up -d` упадёт на конфликте имени контейнера. Пересоздаём его один раз.
+if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER"; then
+    OLD_PROJECT=$(docker inspect "$CONTAINER" \
+        --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || echo "")
+    if [ "$OLD_PROJECT" != "downloads" ]; then
+        echo "🔄 Миграция: $CONTAINER помечен проектом '${OLD_PROJECT:-<нет>}', пересоздаю под 'downloads'"
+        docker stop "$CONTAINER" >/dev/null 2>&1 || true
+        docker rm "$CONTAINER" >/dev/null 2>&1 || true
+    fi
+fi
+
 # Список «сирот» compose-проекта. Не удаляем: на этом VPS из соседних
 # каталогов крутятся чужие сервисы, и они не наши.
 ORPHANS=$(docker compose -f "$COMPOSE_FILE" ps -a --filter status=exited --format '{{.Names}}' 2>/dev/null)
