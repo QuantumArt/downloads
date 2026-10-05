@@ -119,8 +119,13 @@ docker logs "$WEB_CONTAINER" --tail 30
 echo ""
 echo "🌐 Step 4: HTTP smoke test..."
 echo "  Loopback (Docker direct):"
-# /archive/ — каталог, поэтому именно со слэшем: без него nginx ответит 301.
-for path in / /index.html /archive/ /css/demosite.min.css /js/demosite.min.js /fonts/Raleway-Extrabold-800.woff2 /site.webmanifest /robots.txt /sitemap.xml; do
+# Слэш обязателен для каталоговых страниц: /archive, /Angular и т.д. без слэша
+# nginx отдаёт 301 на канонический адрес. Все страницы — и файловые
+# (/QP8, /DPC, /search), и каталоговые (/Angular/, /React/, /GraphQL/).
+for path in / /index.html /archive/ /QP8 /QP8_PG /DPC /Widgets /search /QP79 \
+            /GraphQL/ /DPC.Impact/ /DPC.PdfGenerator/ /Angular/ /React/ \
+            /css/demosite.min.css /js/demosite.min.js /fonts/Raleway-Extrabold-800.woff2 \
+            /site.webmanifest /images/icon-medals.png /robots.txt /sitemap.xml; do
     code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT$path")
     echo "    $path → HTTP $code"
     if [ "$code" != "200" ]; then

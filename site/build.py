@@ -10,6 +10,14 @@
 шаблоны в src/templates/, ассеты в src/static/. Спрайт иконок
 (src/static/img/sprite.svg) инлайнится в <body> — от него зависят
 <use xlink:href="#...">, поэтому подключать его файлом нельзя.
+
+Продуктовые страницы (/QP8, /DPC, /Angular/ и т.д.) лежат в src/pages/
+и копируются в dist/ дословно. Они почти не меняются, а в оригинале
+у каждой своя разметка (блоки «Продукт / Сертификаты / Модули /
+Демо-сайт / Документация», карта в блоке контактов, achievement-label).
+Шаблонизировать их ради правки контента смысла нет, а дословная копия
+гарантирует побайтовое совпадение с оригиналом. Главная и архив
+остались на Jinja — их содержимое действительно редактируется.
 """
 import datetime as dt
 import json
@@ -94,6 +102,24 @@ def build():
         if slug != "404":
             sitemap.append("" if slug == "index" else "archive/")
 
+    # Продуктовые страницы копируются дословно из src/pages/.
+    # Имена файлов повторяют структуру URL оригинала: /QP8 -> QP8.html,
+    # /Angular/ -> Angular/index.html. Их отдаёт try_files в nginx.
+    pages_dir = SRC / "pages"
+    copied = 0
+    if pages_dir.is_dir():
+        for src in sorted(pages_dir.rglob("*.html")):
+            rel = src.relative_to(pages_dir)
+            dst = DIST / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dst)
+            copied += 1
+            if rel.stem == "index":
+                # /Angular/ — с завершающим слэшем, как в оригинале
+                sitemap.append(str(rel.parent).replace("\\", "/") + "/")
+            else:
+                sitemap.append(str(rel).replace("\\", "/")[:-len(".html")])
+
     robots = "User-agent: *\nAllow: /\n"
     if site["site_url"]:
         urls = "\n".join(
@@ -106,7 +132,8 @@ def build():
         robots += f"\nSitemap: {site['site_url']}/sitemap.xml\n"
     (DIST / "robots.txt").write_text(robots, encoding="utf-8")
 
-    print(f"Собрано {len(PAGES)} страниц в {DIST} за {time.time() - t0:.2f} с")
+    print(f"Собрано {len(PAGES) - 1} шаблонных + {copied} дословных страниц "
+          f"в {DIST} за {time.time() - t0:.2f} с")
 
 
 if __name__ == "__main__":
