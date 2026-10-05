@@ -41,6 +41,11 @@ ASSET_RE = re.compile(
     re.I,
 )
 
+# Префиксы хранилища файлов. Старое — qsupport, новое — своё, отдаёт 302
+# на ассеты GitHub Release. Используются только при --expect-link-prefix-rewrite.
+OLD_STORAGE_PREFIX = "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/"
+NEW_STORAGE_PREFIX = "https://storage.quantumart.ru/downloads/"
+
 # Теги, которые самостоятельно тянут ресурсы.
 RESOURCE_TAGS = ("img", "script", "source", "link", "iframe", "video", "audio")
 
@@ -234,8 +239,13 @@ def same_origin(url, origin):
     return urlsplit(url).netloc == urlsplit(origin).netloc
 
 
-def crawl(fetcher, start_url, max_pages, max_depth, ignore):
-    """Обход своего origin. Возвращает (pages, assets, links_by_page, errors, ignored)."""
+def crawl(fetcher, start_url, max_pages, max_depth, ignore, keep_bodies=False):
+    """Обход своего origin.
+
+    Возвращает (pages, assets, links_by_page, errors, ignored[, bodies]).
+    Тела страниц сохраняются только при keep_bodies — они нужны, чтобы привести
+    оригинал к новому хранилищу и сравнить остальное содержимое.
+    """
     origin = "%s://%s" % (urlsplit(start_url).scheme, urlsplit(start_url).netloc)
     seen = set()
     queue = [(start_url, 0)]
@@ -244,6 +254,7 @@ def crawl(fetcher, start_url, max_pages, max_depth, ignore):
     links_by_page = {}
     errors = []
     ignored = []
+    bodies = {}
 
     while queue and len(seen) < max_pages:
         url, depth = queue.pop(0)
@@ -296,6 +307,8 @@ def crawl(fetcher, start_url, max_pages, max_depth, ignore):
 
         pages[key] = rec
         text = body.decode("utf-8", errors="replace")
+        if keep_bodies:
+            bodies[key] = text
         p = LinkCollector()
         try:
             p.feed(text)
@@ -317,7 +330,9 @@ def crawl(fetcher, start_url, max_pages, max_depth, ignore):
             if same_origin(nu, origin):
                 queue.append((nu, depth + 1))
 
-    return pages, assets, links_by_page, errors, ignored
+    # Возврат всегда из 6 элементов: иначе распаковка ломается, когда тела
+    # не запрашивались.
+    return pages, assets, links_by_page, errors, ignored, bodies
 
 
 def main():
@@ -330,6 +345,10 @@ def main():
     ap.add_argument("--original-port", type=int, help="порт оригинала (для локальной копии)")
     ap.add_argument("--max-pages", type=int, default=200)
     ap.add_argument("--max-depth", type=int, default=4)
+    ap.add_argument("--expect-link-prefix-rewrite", action="store_true",
+                    help="зеркало намеренно перевело ссылки со старого хранилища "
+                         f"на новое ({OLD_STORAGE_PREFIX} -> {NEW_STORAGE_PREFIX}); "
+                         "такие расхождения считать ожидаемыми, остальное сверять как есть")
     ap.add_argument("--insecure", action="store_true", help="не проверять TLS-сертификаты")
     ap.add_argument("--ca-bundle", help="путь к файлу корневых сертификатов (PEM)")
     ap.add_argument("--min-pages", type=int, default=2,
@@ -340,9 +359,11 @@ def main():
     args = ap.parse_args()
 
     live = args.live_url.rstrip("/") or "/"
-    live_host = urlsplit(live).netloc
+    # .hostname, а не .netloc: netloc включает порт («127.0.0.1:3090»),
+    # и такое значение не резолвится — gaierror.
+    live_host = urlsplit(live).hostname or urlsplit(live).netloc
     orig = (args.original_url or live).rstrip("/") or "/"
-    orig_host = args.original_host or urlsplit(orig).netloc
+    orig_host = args.original_host or (urlsplit(orig).hostname or urlsplit(orig).netloc)
 
     if args.ca_bundle:
         ctx = ssl.create_default_context(cafile=args.ca_bundle)
@@ -368,14 +389,17 @@ def main():
 
     print("Обход зеркала…")
     live_start = live_f.base + "/"
-    live_pages, live_assets, live_links, live_err, live_ign = crawl(
+    (live_pages, live_assets, live_links, live_err, live_ign,
+     _live_bodies) = crawl(
         live_f, live_start, args.max_pages, args.max_depth, args.ignore)
     print(f"  страниц: {len(live_pages)}, ассетов: {len(live_assets)}, ошибок: {len(live_err)}")
 
     print("Обход оригинала…")
     orig_start = orig_f.base + "/"
-    orig_pages, orig_assets, orig_links, orig_err, orig_ign = crawl(
-        orig_f, orig_start, args.max_pages, args.max_depth, args.ignore)
+    (orig_pages, orig_assets, orig_links, orig_err, orig_ign,
+     orig_body_cache) = crawl(
+        orig_f, orig_start, args.max_pages, args.max_depth, args.ignore,
+        keep_bodies=args.expect_link_prefix_rewrite)
     print(f"  страниц: {len(orig_pages)}, ассетов: {len(orig_assets)}, ошибок: {len(orig_err)}")
     print()
 
@@ -397,8 +421,25 @@ def main():
 
     # 2. Содержимое страниц
     print("2. СОДЕРЖИМОЕ СТРАНИЦ (sha256)")
+    def norm_body(path_key, pages):
+        """Тело страницы, опционально с приведёнными к новому хранилищу ссылками.
+
+        При --expect-link-prefix-rewrite слепое сравнение sha256 бессмысленно:
+        страницы намеренно разошлись. Тогда применяем то же преобразование к
+        оригиналу, что и к зеркалу, и сравниваем остальное — так любая
+        НАСТОЯЩАЯ ошибка (забытый файл, опечатка) всё равно всплывёт.
+        """
+        if not args.expect_link_prefix_rewrite:
+            return pages[path_key]
+        raw = orig_body_cache.get(path_key)
+        if raw is None:
+            return pages[path_key]
+        fixed = raw.replace(OLD_STORAGE_PREFIX, NEW_STORAGE_PREFIX).encode("utf-8")
+        return {"status": 200, "ctype": "text/html", "size": len(fixed),
+                "sha256": hashlib.sha256(fixed).hexdigest()}
+
     diff_pages = [p for p in sorted(orig_pages) if p in live_pages
-                  and live_pages[p]["sha256"] != orig_pages[p]["sha256"]]
+                  and live_pages[p]["sha256"] != norm_body(p, orig_pages)["sha256"]]
     for p in diff_pages:
         print(f"   ❌ {p}")
         print(f"        оригинал: {orig_pages[p]['size']:>9,} B  {orig_pages[p]['sha256'][:16]}")
@@ -433,6 +474,12 @@ def main():
     for path in sorted(set(orig_links) & set(live_links)):
         o = orig_links[path]
         m = live_links[path]
+        if args.expect_link_prefix_rewrite:
+            o = Counter({
+                (u.replace(OLD_STORAGE_PREFIX, NEW_STORAGE_PREFIX)
+                 if u.startswith(OLD_STORAGE_PREFIX) else u): n
+                for u, n in o.items()})
+            o = Counter({u: n for u, n in o.items() if n})
         if o == m:
             continue
         link_diffs += 1

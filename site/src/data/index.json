@@ -35,32 +35,32 @@
       "items": [
         {
           "title": "База данных демо-сайта QP8.WidgetPlatform (PostgreSQL) ",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/demosite_rus_db.tar.gz",
+          "url": "https://storage.quantumart.ru/downloads/demosite_rus_db.tar.gz",
           "target": ""
         },
         {
           "title": "Статические файлы демо-сайта QP8.WidgetPlatform",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/demosite_rus.tar.gz",
+          "url": "https://storage.quantumart.ru/downloads/demosite_rus.tar.gz",
           "target": ""
         },
         {
           "title": "База данных демо-сайта QP8.ProductCatalog (PostgreSQL) ",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/qp8-product-catalog-database.tar.gz",
+          "url": "https://storage.quantumart.ru/downloads/qp8-product-catalog-database.tar.gz",
           "target": ""
         },
         {
           "title": "База данных из дистрибутива QP8.CMS с поддержкой PostgreSQL ",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/Database.Pg.zip",
+          "url": "https://storage.quantumart.ru/downloads/Database.Pg.zip",
           "target": ""
         },
         {
           "title": "База данных из дистрибутива QP8.CMS с поддержкой PostgreSQL (SQL Server)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/Database.zip",
+          "url": "https://storage.quantumart.ru/downloads/Database.zip",
           "target": ""
         },
         {
           "title": "База данных из инсталлятора QP8.CMS (SQL Server)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/demo_qp.zip",
+          "url": "https://storage.quantumart.ru/downloads/demo_qp.zip",
           "target": ""
         }
       ]
@@ -70,7 +70,7 @@
       "items": [
         {
           "title": "QP8.ConsoleDbUpdate (консольное приложение для выполнения записанных XML-скриптов и импорта CSV-файлов)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/QP8.ConsoleDbUpdate.zip",
+          "url": "https://storage.quantumart.ru/downloads/QP8.ConsoleDbUpdate.zip",
           "target": ""
         }
       ]

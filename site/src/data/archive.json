@@ -16,37 +16,37 @@
       "items": [
         {
           "title": "Quantumart.dll",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/Quantumart.zip",
+          "url": "https://storage.quantumart.ru/downloads/Quantumart.zip",
           "target": "",
           "tight_icon": false
         },
         {
           "title": "Эталонная база данных из инсталлятора",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/publishing.zip",
+          "url": "https://storage.quantumart.ru/downloads/publishing.zip",
           "target": "",
           "tight_icon": false
         },
         {
           "title": ".NET-компоненты QP7 для ручной установки",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/Components.zip",
+          "url": "https://storage.quantumart.ru/downloads/Components.zip",
           "target": "",
           "tight_icon": false
         },
         {
           "title": "Cкрипты QP7 Backend",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/source.zip",
+          "url": "https://storage.quantumart.ru/downloads/source.zip",
           "target": "",
           "tight_icon": false
         },
         {
           "title": "XSLT-файлы для генератора LINQ-to-SQL классов",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/mapping.zip",
+          "url": "https://storage.quantumart.ru/downloads/mapping.zip",
           "target": "",
           "tight_icon": false
         },
         {
           "title": "QP Web Service",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/QPWebService.zip",
+          "url": "https://storage.quantumart.ru/downloads/QPWebService.zip",
           "target": "",
           "tight_icon": false
         }
@@ -57,19 +57,19 @@
       "items": [
         {
           "title": "QA_LicenceInfo (получение информации для выписки лицензии)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/QA_LicenceInfo.zip",
+          "url": "https://storage.quantumart.ru/downloads/QA_LicenceInfo.zip",
           "target": "",
           "tight_icon": false
         },
         {
           "title": "QPDatabaseSqlRunner (прогон SQL-фиксов одновременно на множестве баз)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/QPDatabaseSqlRunner.zip",
+          "url": "https://storage.quantumart.ru/downloads/QPDatabaseSqlRunner.zip",
           "target": "",
           "tight_icon": false
         },
         {
           "title": "QPCodeClean (коррекция базы для перевода на версию 7.6.1.0)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/QPCodeClean.zip",
+          "url": "https://storage.quantumart.ru/downloads/QPCodeClean.zip",
           "target": "",
           "tight_icon": false
         }
@@ -86,91 +86,91 @@
         },
         {
           "title": "Руководство по установке QP7.Framework (RUS)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/QP7_Installation_Guide_RUS.pdf",
+          "url": "https://storage.quantumart.ru/downloads/QP7_Installation_Guide_RUS.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "Help по Backend Explorer 2.1 (ENG)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/Help_to_QP7_Backend_Explorer_ENG.pdf",
+          "url": "https://storage.quantumart.ru/downloads/Help_to_QP7_Backend_Explorer_ENG.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "Help по Backend Explorer 2.1 (RUS)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/Help_to_QP7_Backend_Explorer_RUS.pdf",
+          "url": "https://storage.quantumart.ru/downloads/Help_to_QP7_Backend_Explorer_RUS.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "Release Notes (версии 7.2 - 7.9 кратко) (RUS)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/Release_Notes_RUS.pdf",
+          "url": "https://storage.quantumart.ru/downloads/Release_Notes_RUS.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "QP7.Framework API (ENG)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/API_ASP.NET_ENG.pdf",
+          "url": "https://storage.quantumart.ru/downloads/API_ASP.NET_ENG.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "Руководство разработчика ASP.NET (ENG)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/Developer_Guide_ASP.NET_ENG.pdf",
+          "url": "https://storage.quantumart.ru/downloads/Developer_Guide_ASP.NET_ENG.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "Руководство редактора (RUS)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/Editor_Guide_RUS.pdf",
+          "url": "https://storage.quantumart.ru/downloads/Editor_Guide_RUS.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "Уведомления в QP7.Framework. Архитектура и настройка",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/QP7_Notifications.pdf",
+          "url": "https://storage.quantumart.ru/downloads/QP7_Notifications.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "Security в QP7.Framework. Архитектура и настройка",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/QP7_Security_Model.pdf",
+          "url": "https://storage.quantumart.ru/downloads/QP7_Security_Model.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "OnScreen (замечания по установке)",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/QP7_OnScreen.pdf",
+          "url": "https://storage.quantumart.ru/downloads/QP7_OnScreen.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "QP7 Workflow",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/QP7_Workflow.pdf",
+          "url": "https://storage.quantumart.ru/downloads/QP7_Workflow.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "Интеграция QP7 и Active Directory",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads//QP7_Active_Directory.pdf",
+          "url": "https://storage.quantumart.ru/downloads/QP7_Active_Directory.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "Замечания по SQL-иньекции",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/SQL_injection.pdf",
+          "url": "https://storage.quantumart.ru/downloads/SQL_injection.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "Мультисайтовая загрузка объектов",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/Multisite_Object_Loading.pdf",
+          "url": "https://storage.quantumart.ru/downloads/Multisite_Object_Loading.pdf",
           "target": "_blank",
           "tight_icon": false
         },
         {
           "title": "Конфигурационный файл .NET-сайта",
-          "url": "https://storage.qp.qsupport.ru/qa_official_site/images/downloads/configuration_file.pdf",
+          "url": "https://storage.quantumart.ru/downloads/configuration_file.pdf",
           "target": "_blank",
           "tight_icon": false
         }
