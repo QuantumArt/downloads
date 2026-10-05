@@ -1,6 +1,8 @@
 {
   "site_url": "https://downloads.quantumart.ru",
   "yandex_metrika_id": "87525699",
+  "form_endpoint": "https://formspree.io/f/mjygvben",
+  "form_notice": "Форма временно недоступна. Напишите нам на info@quantumart.ru",
   "company": {
     "name": "QuantumArt",
     "home_url": "https://quantumart.ru",

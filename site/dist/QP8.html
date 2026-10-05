@@ -267,7 +267,7 @@
                             </div>
                         </div>
                         <div class="contacts-form__form">
-                            <form class="form form--dark" action="/QP8/Send" method="POST" data-form-validate="data-form-validate">
+                            <form class="form form--dark" action="https://formspree.io/f/mjygvben" method="POST" data-form-validate="data-form-validate">
                                 <div class="form__field form__field--input">
                                     <label class="visually-hidden" for="contacts-name">Ваше имя</label><input class="form__input" type="text" data-type="text" data-error="Неверно набрано имя" name="feedback-name" id="contacts-name" placeholder="Как к Вам обращаться" /><svg class="form__icon" width="24" height="24" aria-hidden="true">
                                         <use xlink:href="#icon-error"></use>
@@ -373,5 +373,6 @@
     </div>
     <script type="text/javascript" src="//maps.google.com/maps/api/js?sensor=false&amp;language=ru&amp;key=AIzaSyABz3DSBAfs14y4pUhbAVoEXlBV3WlAIs4"></script>
 
+<script>(function(){var f=window.fetch;if(!f||window.__qaAcceptJson)return;window.FETCH_PATCH=1;window.fetch=function(u,o){o=o||{};if(String(u).indexOf("formspree.io")>-1){o=Object.assign({},o);o.headers=Object.assign({"Accept":"application/json"},o.headers||{});}return f.call(this,u,o);};})();</script>
 </body>
 </html>

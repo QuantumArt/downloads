@@ -37,6 +37,9 @@ from pathlib import Path
 from urllib.parse import urldefrag, urljoin, urlsplit, urlunsplit
 
 # Расширения, которые считаем ассетами, а не страницами.
+FORM_NOTICE = ""
+FORM_ENDPOINT = ""
+
 ASSET_RE = re.compile(
     r"\.(?:css|mjs|js|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|"
     r"pdf|zip|tar\.gz|tgz|webmanifest|txt|xml|map)$",
@@ -47,6 +50,11 @@ ASSET_RE = re.compile(
 # переименования файлов. Описаны в src/data/link-migration.json рядом с
 # содержимым сайта, чтобы ожидаемое и проверяемое лежало в одном месте.
 MIGRATION_FILE = Path(__file__).resolve().parent.parent / "src/data/link-migration.json"
+
+# Обработка формы — объявленное отступление, описанное кодом. Тот же модуль
+# зовёт и сборка: пока правка живёт в одном месте, эталон sha256 точен.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import patches  # noqa: E402
 
 
 def load_migration():
@@ -375,6 +383,11 @@ def main():
     args = ap.parse_args()
 
     migration = load_migration()
+    _site = json.loads((Path(__file__).resolve().parent.parent
+                        / "src/data/site.json").read_text(encoding="utf-8"))
+    global FORM_NOTICE, FORM_ENDPOINT
+    FORM_NOTICE = _site.get("form_notice", "")
+    FORM_ENDPOINT = _site.get("form_endpoint", "")
     live = args.live_url.rstrip("/") or "/"
     # .hostname, а не .netloc: netloc включает порт («127.0.0.1:3090»),
     # и такое значение не резолвится — gaierror.
@@ -451,7 +464,10 @@ def main():
         raw = orig_body_cache.get(path_key)
         if raw is None:
             return pages[path_key]
-        fixed = apply_migration(raw, *migration).encode("utf-8")
+        fixed = apply_migration(raw, *migration)
+        # Тот же патч формы, что и при сборке, иначе побайтовое равенство
+        # недостижимо и проверка подтверждала бы сама себя.
+        fixed = patches.apply(fixed, FORM_NOTICE, FORM_ENDPOINT).encode("utf-8")
         return {"status": 200, "ctype": "text/html", "size": len(fixed),
                 "sha256": hashlib.sha256(fixed).hexdigest()}
 

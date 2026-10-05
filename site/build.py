@@ -28,9 +28,17 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, Undefined
 
+
 ROOT = Path(__file__).parent
 SRC = ROOT / "src"
 DIST = ROOT / "dist"
+
+
+# Единственное объявленное отступление от байтов боевого сайта — обработка
+# формы. Логика живёт в tools/patches.py, и её же зовёт verify_mirror.py:
+# пока отступление описано в одном месте, эталон sha256 остаётся точным.
+sys.path.insert(0, str(ROOT / "tools"))
+import patches  # noqa: E402
 
 
 def load(name):
@@ -98,7 +106,10 @@ def build():
         target.parent.mkdir(parents=True, exist_ok=True)
         # Jinja срезает финальный перевод строки, а комментарий в шапке шаблона
         # оставляет ведущую пустую строку — в источнике нет ни того, ни другого.
-        target.write_text(html.strip("\n") + "\n", encoding="utf-8")
+        html = html.strip("\n") + "\n"
+        html = patches.apply(html, site.get("form_notice", ""),
+                             site.get("form_endpoint", ""))
+        target.write_text(html, encoding="utf-8")
         if slug != "404":
             sitemap.append("" if slug == "index" else "archive/")
 
@@ -112,7 +123,13 @@ def build():
             rel = src.relative_to(pages_dir)
             dst = DIST / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(src, dst)
+            # Страница копируется дословно, но объявленное отступление
+            # (обработка формы) применяется и здесь — иначе зеркало останется
+            # с неработающей формой, а проверка паритета — нет.
+            raw = src.read_text(encoding="utf-8")
+            patched = patches.apply(raw, site.get("form_notice", ""),
+                                    site.get("form_endpoint", ""))
+            dst.write_text(patched, encoding="utf-8")
             copied += 1
             if rel.stem == "index":
                 # /Angular/ — с завершающим слэшем, как в оригинале
