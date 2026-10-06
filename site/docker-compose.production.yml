@@ -38,10 +38,12 @@ services:
     # `up -d --force-recreate`.
     #
     # Каталог НЕ в /tmp: /tmp чистится при перезагрузке и не предназначен для
-    # постоянных данных. По умолчанию ./logs рядом с compose-файлом,
-    # переопределяется переменной окружения DL_LOGS_DIR.
+    # постоянных данных. По умолчанию системное /var/log/downloads — логи
+    # лежат рядом с логами хостового nginx и переживают всё, включая снос
+    # самого каталога проекта. Переопределяется переменной DL_LOGS_DIR.
+    # Docker создаёт каталог при первом запуске, владельцем будет root.
     volumes:
-      - ${DL_LOGS_DIR:-./logs}:/var/log/nginx
+      - ${DL_LOGS_DIR:-/var/log/downloads}:/var/log/nginx
     healthcheck:
       # 127.0.0.1, а не localhost — см. комментарий в Dockerfile: localhost
       # резолвится в ::1, nginx слушает только IPv4.

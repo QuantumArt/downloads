@@ -242,7 +242,7 @@ git маскирует значение как `Authorization: Basic <redacted>`
 | Источник | Путь | Переживает пересоздание контейнера |
 |---|---|---|
 | **Хостовый nginx** (внешние запросы) | `/var/log/nginx/downloads.quantumart.ru.access.log` и `.error.log` | **да** — это файлы на хосте, контейнер к ним отношения не имеет |
-| **Контейнерный nginx** (то, что дошло до контейнера) | `site/logs/access.log` и `site/logs/error.log` | **да** — volume перекрывает `/var/log/nginx` |
+| **Контейнерный nginx** (то, что дошло до контейнера) | `/var/log/downloads/access.log` и `error.log` | **да** — volume перекрывает `/var/log/nginx` |
 
 Оба уровня нужны: хостовый видит всё, что пришло снаружи (включая то, что
 nginx отклонил до проксирования), контейнерный — только то, что реально
@@ -274,15 +274,19 @@ volumes:
 Volume перекрывает каталог из образа вместе с симлинками, и nginx пишет в
 настоящие файлы на хосте.
 
-**Каталог намеренно не `/tmp`:** он чистится при перезагрузке и не
-предназначен для постоянных данных. Если хочется системное место —
-переопредели переменную:
+**Каталог по умолчанию — `/var/log/downloads`:** системное место рядом с
+логами хостового nginx, переживает и перезагрузку, и снос каталога проекта.
+`/tmp` для этого не годится: он чистится при перезагрузке.
+
+Docker создаёт каталог при первом запуске, владельцем будет `root` (deploy
+идёт от root). Переопределить можно переменной:
 
 ```bash
-DL_LOGS_DIR=/var/log/downloads ./deploy.sh
+DL_LOGS_DIR=/var/log/quantumart-downloads ./deploy.sh
 ```
 
-Либо в `.env` рядом с compose-файлом.
+либо через `.env` рядом с compose-файлом — compose подхватит
+`DL_LOGS_DIR` оттуда.
 
 ### Ротация
 
@@ -290,7 +294,7 @@ DL_LOGS_DIR=/var/log/downloads ./deploy.sh
 достаточно `logrotate`:
 
 ```
-/root/downloads/site/logs/*.log {
+/var/log/downloads/*.log {
     daily
     rotate 14
     compress
@@ -307,13 +311,13 @@ DL_LOGS_DIR=/var/log/downloads ./deploy.sh
 
 ```bash
 # какие страницы реально открывают
-awk '{print $7}' ~/downloads/site/logs/access.log | sort | uniq -c | sort -rn | head
+awk '{print $7}' /var/log/downloads/access.log | sort | uniq -c | sort -rn | head
 
 # 404 и 500
-awk '$9 ~ /^[45]/ {print $9, $7}' ~/downloads/site/logs/access.log | sort | uniq -c | sort -rn | head
+awk '$9 ~ /^[45]/ {print $9, $7}' /var/log/downloads/access.log | sort | uniq -c | sort -rn | head
 
 # ошибки nginx
-tail -50 ~/downloads/site/logs/error.log
+tail -50 /var/log/downloads/error.log
 ```
 
 ## Откат
