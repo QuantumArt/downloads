@@ -235,6 +235,87 @@ GIT_CURL_VERBOSE=1 git ls-remote origin 2>&1 | grep -iE '< HTTP|authorization' |
 
 git маскирует значение как `Authorization: Basic <redacted>`, токен не утечёт.
 
+## Логи
+
+### Где что лежит
+
+| Источник | Путь | Переживает пересоздание контейнера |
+|---|---|---|
+| **Хостовый nginx** (внешние запросы) | `/var/log/nginx/downloads.quantumart.ru.access.log` и `.error.log` | **да** — это файлы на хосте, контейнер к ним отношения не имеет |
+| **Контейнерный nginx** (то, что дошло до контейнера) | `site/logs/access.log` и `site/logs/error.log` | **да** — volume перекрывает `/var/log/nginx` |
+
+Оба уровня нужны: хостовый видит всё, что пришло снаружи (включая то, что
+nginx отклонил до проксирования), контейнерный — только то, что реально
+дошло до `proxy_pass`, с поправкой на `try_files`.
+
+### Почему раньше логи пропадали
+
+В образе `nginx:alpine` путь `/var/log/nginx/access.log` — **симлинк на
+`/dev/stdout`**. Поэтому логи шли только в `docker logs` и жили ровно до
+первого `up -d --force-recreate`: пересозданный контейнер стартует с нуля,
+лог-файла у него нет. Один деплой — и история обнулена.
+
+### Что сделано
+
+В `nginx/default.conf` добавлены явные директивы:
+
+```nginx
+access_log /var/log/nginx/access.log;
+error_log  /var/log/nginx/error.log warn;
+```
+
+а в `docker-compose.production.yml` — volume:
+
+```yaml
+volumes:
+  - ${DL_LOGS_DIR:-./logs}:/var/log/nginx
+```
+
+Volume перекрывает каталог из образа вместе с симлинками, и nginx пишет в
+настоящие файлы на хосте.
+
+**Каталог намеренно не `/tmp`:** он чистится при перезагрузке и не
+предназначен для постоянных данных. Если хочется системное место —
+переопредели переменную:
+
+```bash
+DL_LOGS_DIR=/var/log/downloads ./deploy.sh
+```
+
+Либо в `.env` рядом с compose-файлом.
+
+### Ротация
+
+Ротации нет: `access.log` растёт без ограничений. Для этого сервера
+достаточно `logrotate`:
+
+```
+/root/downloads/site/logs/*.log {
+    daily
+    rotate 14
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+```
+
+`copytruncate` обязателен — nginx держит файл открытым, и простое
+переименование его не отпустит.
+
+### Что смотреть
+
+```bash
+# какие страницы реально открывают
+awk '{print $7}' ~/downloads/site/logs/access.log | sort | uniq -c | sort -rn | head
+
+# 404 и 500
+awk '$9 ~ /^[45]/ {print $9, $7}' ~/downloads/site/logs/access.log | sort | uniq -c | sort -rn | head
+
+# ошибки nginx
+tail -50 ~/downloads/site/logs/error.log
+```
+
 ## Откат
 
 Если что-то пошло не так:
