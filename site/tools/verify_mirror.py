@@ -477,8 +477,15 @@ def main():
         print(f"   ❌ {p}")
         print(f"        оригинал: {orig_pages[p]['size']:>9,} B  {orig_pages[p]['sha256'][:16]}")
         print(f"        зеркало:   {live_pages[p]['size']:>9,} B  {live_pages[p]['sha256'][:16]}")
-    if not diff_pages:
-        print(f"   ✅ все {len(orig_pages)} страниц совпадают побайтово")
+    compared = len([p for p in orig_pages if p in live_pages])
+    if not diff_pages and compared == len(orig_pages):
+        print(f"   ✅ все {compared} страниц совпадают побайтово")
+    elif not diff_pages:
+        # Сравнили меньше, чем нашли у оригинала: часть страниц не попала в
+        # зеркало из-за ошибки обхода. Раньше здесь печаталось число страниц
+        # оригинала, и отчёт утверждал «все 13 совпадают», хотя сравнивалось 10.
+        print(f"   ⚠️  совпадают {compared} из {len(orig_pages)} — "
+              f"{len(orig_pages) - compared} страниц не попали в зеркало (см. ошибки обхода)")
     else:
         problems.append("содержимое страниц")
     print()
@@ -518,9 +525,12 @@ def main():
             print(f"        только в оригинале: {u}")
         for u in sorted((m - o).elements()):
             print(f"        только в зеркале:   {u}")
-    if link_diffs == 0:
+    if link_diffs == 0 and set(orig_links) == set(live_links):
         total = sum(len(v) for v in orig_links.values())
         print(f"   ✅ наборы ссылок совпадают на всех {len(orig_links)} страницах ({total} ссылок)")
+    elif link_diffs == 0:
+        print(f"   ⚠️  наборы ссылок совпадают на {len(set(orig_links) & set(live_links))} "
+              f"страницах из {len(orig_links)}")
     else:
         print(f"   ❌ расхождения на {link_diffs} страницах")
         problems.append("ссылки")
