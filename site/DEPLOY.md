@@ -153,9 +153,9 @@ curl -I https://downloads.quantumart.ru/
 curl -I https://downloads.quantumart.ru/archive/
 ```
 
-Все должны вернуть `HTTP/2 200`. Для `/archive/` важно наличие слэша — без него
-nginx отвечает `301` на канонический адрес.
-
+Все должны вернуть `HTTP/2 200`. Проверяй оба варианта каждого
+URL — со слэшем и без: `/archive` и `/archive/`, `/DPC` и `/DPC/`. Оба дают 200,
+как на оригинале (см. docs/VERIFICATION.md, раздел 4.1).
 Проверить, что отдаётся наш контейнер, а не старый кластер:
 
 ```bash
@@ -182,7 +182,7 @@ cd ~/downloads/site
 
 ```
 remote: Write access to repository not granted.
-fatal: unable to access 'https://github.com/QuantumArt/downloads.git/': 403
+fatal: unable to access `https://github.com/QuantumArt/downloads.git/`: 403
 ```
 
 `deploy.sh` это обходит — выставляет `GIT_CONFIG_GLOBAL=/dev/null`,
@@ -221,7 +221,7 @@ git config --local credential.helper ''
 ```bash
 GH=$(printf '%s' "$GH_TOKEN" | sha256sum | cut -c1-8)
 US=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill 2>/dev/null \
-     | sed -n 's/^password=//p' | tr -d '\n' | sha256sum | cut -c1-8)
+     | sed -n `s/^password=//p` | tr -d '\n' | sha256sum | cut -c1-8)
 echo "наш: $GH | git отдаёт: $US"
 ```
 
@@ -314,7 +314,7 @@ DL_LOGS_DIR=/var/log/quantumart-downloads ./deploy.sh
 awk '{print $7}' /var/log/downloads/access.log | sort | uniq -c | sort -rn | head
 
 # 404 и 500
-awk '$9 ~ /^[45]/ {print $9, $7}' /var/log/downloads/access.log | sort | uniq -c | sort -rn | head
+awk `$9 ~ /^[45]/ {print $9, $7}` /var/log/downloads/access.log | sort | uniq -c | sort -rn | head
 
 # ошибки nginx
 tail -50 /var/log/downloads/error.log
