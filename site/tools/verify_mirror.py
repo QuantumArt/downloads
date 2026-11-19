@@ -209,19 +209,6 @@ class Fetcher:
         return f"{self.scheme}://{netloc}"
 
     def get(self, path, extra_headers=None):
-        if self.scheme == "https":
-            if self.ip:
-                conn = PinnedHTTPSConnection(self.host, self.ip, self.port, self.timeout, self.ctx)
-            else:
-                conn = http.client.HTTPSConnection(
-                    self.host, self.port, timeout=self.timeout, context=self.ctx)
-        else:
-            target = self.ip or self.host
-            if self.ip:
-                conn = PinnedHTTPConnection(self.host, self.ip, self.port, self.timeout)
-            else:
-                conn = http.client.HTTPConnection(
-                    target, self.port, timeout=self.timeout)
         headers = {
             "Host": self.host if self.port in (80, 443) else f"{self.host}:{self.port}",
             "User-Agent": "verify-mirror/1.0",
@@ -230,13 +217,40 @@ class Fetcher:
         }
         if extra_headers:
             headers.update(extra_headers)
-        try:
-            conn.request("GET", path or "/", headers=headers)
-            resp = conn.getresponse()
-            body = resp.read()
-            return resp.status, dict(resp.getheaders()), body
-        finally:
-            conn.close()
+        # Ретраи. Оригинал — старый кластер на ASP.NET: он отвечает медленно
+        # (десятки секунд на тяжёлые страницы) и иногда рвёт соединение.
+        # Без ретрая обход оригинала обрывался, страницы выпадали из
+        # сравнения, а отчёт показывал «расхождение по составу страниц» —
+        # то есть инструмент сам себе врал. Три попытки на соединение.
+        last = None
+        for _attempt in range(3):
+            conn = None
+            try:
+                if self.scheme == "https":
+                    if self.ip:
+                        conn = PinnedHTTPSConnection(
+                            self.host, self.ip, self.port, self.timeout, self.ctx)
+                    else:
+                        conn = http.client.HTTPSConnection(
+                            self.host, self.port, timeout=self.timeout, context=self.ctx)
+                else:
+                    target = self.ip or self.host
+                    if self.ip:
+                        conn = PinnedHTTPConnection(
+                            self.host, self.ip, self.port, self.timeout)
+                    else:
+                        conn = http.client.HTTPConnection(
+                            target, self.port, timeout=self.timeout)
+                conn.request("GET", path or "/", headers=headers)
+                resp = conn.getresponse()
+                body = resp.read()
+                return resp.status, dict(resp.getheaders()), body
+            except (socket.timeout, TimeoutError, OSError) as e:
+                last = e
+            finally:
+                if conn is not None:
+                    conn.close()
+        raise last
 
 
 class PinnedHTTPConnection(http.client.HTTPConnection):
@@ -367,6 +381,11 @@ def main():
     ap.add_argument("--original-ip", help="IP оригинала (если DNS уже переключён)")
     ap.add_argument("--original-scheme", help="http/https для оригинала (по умолчанию — из URL)")
     ap.add_argument("--original-port", type=int, help="порт оригинала (для локальной копии)")
+    ap.add_argument("--timeout", type=int, default=20,
+                    help="таймаут запроса к зеркалу, секунд")
+    ap.add_argument("--original-timeout", type=int, default=90,
+                    help="таймаут запроса к оригиналу, секунд "
+                         "(старый ASP.NET-кластер отвечает медленно)")
     ap.add_argument("--max-pages", type=int, default=200)
     ap.add_argument("--max-depth", type=int, default=4)
     ap.add_argument("--expect-link-prefix-rewrite", action="store_true",
@@ -404,10 +423,11 @@ def main():
     live_p = urlsplit(live)
     orig_p = urlsplit(orig)
     live_f = Fetcher(live_host, ctx=ctx, scheme=live_p.scheme or "https",
-                     port=live_p.port or (443 if live_p.scheme == "https" else 80), timeout=20)
+                     port=live_p.port or (443 if live_p.scheme == "https" else 80),
+                     timeout=args.timeout)
     orig_port = args.original_port or orig_p.port or (443 if orig_p.scheme == "https" else 80)
     orig_f = Fetcher(orig_host, ctx=ctx, scheme=args.original_scheme or orig_p.scheme or "https",
-                     port=orig_port, ip=args.original_ip, timeout=20)
+                     port=orig_port, ip=args.original_ip, timeout=args.original_timeout)
 
     print("=" * 72)
     print("СВЕРКА ЗЕРКАЛА С ОРИГИНАЛОМ")
