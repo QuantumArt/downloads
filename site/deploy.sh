@@ -140,11 +140,13 @@ docker logs "$WEB_CONTAINER" --tail 30
 echo ""
 echo "🌐 Step 4: HTTP smoke test..."
 echo "  Loopback (Docker direct):"
-# Слэш обязателен для каталоговых страниц: /archive, /Angular и т.д. без слэша
-# nginx отдаёт 301 на канонический адрес. Все страницы — и файловые
-# (/QP8, /DPC, /search), и каталоговые (/Angular/, /React/, /GraphQL/).
-for path in / /index.html /archive/ /QP8 /QP8_PG /DPC /Widgets /search /QP79 \
-            /GraphQL/ /DPC.Impact/ /DPC.PdfGenerator/ /Angular/ /React/ \
+# Каждая продуктовая страница отдаётся по обоим вариантам URL — со слэшем
+# и без: на оригинале (ASP.NET) /QP8 и /QP8/ — оба 200. Проверяем оба,
+# иначе регрессия в правилах nginx уедет незамеченной.
+for path in / /archive /archive/ /QP8 /QP8/ /QP8_PG /QP8_PG/ /DPC /DPC/ \
+            /Widgets /Widgets/ /search /search/ /QP79 /QP79/ \
+            /GraphQL /GraphQL/ /DPC.Impact /DPC.Impact/ \
+            /DPC.PdfGenerator /DPC.PdfGenerator/ /Angular /Angular/ /React /React/ \
             /css/demosite.min.css /js/demosite.min.js /fonts/Raleway-Extrabold-800.woff2 \
             /site.webmanifest /images/icon-medals.png /robots.txt /sitemap.xml; do
     code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT$path")
@@ -154,12 +156,18 @@ for path in / /index.html /archive/ /QP8 /QP8_PG /DPC /Widgets /search /QP79 \
     fi
 done
 
-echo "  404 (error_page):"
-code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/definitely-missing-page")
-echo "    /definitely-missing-page → HTTP $code (ожидается 404)"
-if [ "$code" != "404" ]; then
-    print_error "Expected 404 for missing page, got $code"
-fi
+echo "  404 (error_page и закрытые адреса):"
+# Прямые .html и каталоги ассетов на оригинале дают 404 — так же и в зеркале.
+# /index.html раньше ожидал 200, но закрывать прямые .html нужно: на
+# оригинале ASP.NET знает только маршруты /QP8, /archive/, /DPC/...
+for path in /definitely-missing-page /index.html /QP8.html /archive/index.html \
+            /css/ /js/ /favicon.ico; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT$path")
+    echo "    $path → HTTP $code (ожидается 404)"
+    if [ "$code" != "404" ]; then
+        print_error "Expected 404 for $path, got $code"
+    fi
+done
 
 echo "  External (через хостовый nginx, если уже настроен):"
 for path in / /archive/; do
